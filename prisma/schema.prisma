@@ -1,0 +1,286 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Modelo de Usuario
+model User {
+  id                String              @id @default(cuid())
+  name              String
+  email             String              @unique
+  password          String
+  role              String              @default("user") // admin, user, etc.
+  permissions       String              @default("") // Comma-separated permissions
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  orders            Order[]
+  invoices          Invoice[]
+  inventoryMovements InventoryMovement[]
+}
+
+// Modelo de Cliente
+model Customer {
+  id                  String    @id @default(cuid())
+  name                String
+  firstName           String?   
+  lastName            String?   
+  email               String?   @unique
+  phone               String?
+  address             String?
+  city                String?   
+  state               String?   
+  zipCode             String?   
+  type                String    // Individual, Empresa
+  status              String    @default("Activo")
+  communicationPrefs  String?   
+  notes               String?   
+  birthday            DateTime? 
+  lastPurchaseDate    DateTime? 
+  totalSpent          Float     @default(0) 
+  purchaseCount       Int       @default(0) 
+  purchaseHistory     String?   // Serialized JSON as string
+  subscriptionDetails String?   // Serialized JSON as string
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  orders              Order[]
+  subscriptions       Subscription[]
+  invoices            Invoice[]
+  warehouseOrders     WarehouseOrder[] 
+}
+
+// Modelo de Categoría de Producto
+model Category {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  products    Product[]
+}
+
+// Modelo de Producto
+model Product {
+  id                String              @id @default(cuid())
+  name              String
+  description       String?
+  sku               String              @unique
+  barcode           String?
+  gtin              String?             // Código GTIN
+  qrCode            String?             // Código QR
+  price             Float
+  price50cm         Float?
+  price60cm         Float?
+  price70cm         Float?
+  stock             Int                 @default(0)
+  minStock          Int                 @default(5)
+  color             String?
+  image             String?
+  metadata          String?             // JSON con datos adicionales
+  categoryId        String
+  category          Category            @relation(fields: [categoryId], references: [id])
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  orderItems        OrderItem[]
+  consignmentItems  ConsignmentItem[]
+  inventoryMovements InventoryMovement[]
+  warehouseOrderItems WarehouseOrderItem[] 
+}
+
+// Modelo de Movimiento de Inventario
+model InventoryMovement {
+  id            String    @id @default(cuid())
+  productId     String
+  product       Product   @relation(fields: [productId], references: [id])
+  previousStock Int
+  newStock      Int
+  amount        Int       // Positivo para entradas, negativo para salidas
+  reason        String    // Compra, Venta, Ajuste, etc.
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+  createdAt     DateTime  @default(now())
+}
+
+// Modelo de Orden
+model Order {
+  id              String          @id @default(cuid())
+  orderNumber     String          @unique
+  customerId      String
+  customer        Customer        @relation(fields: [customerId], references: [id])
+  userId          String
+  user            User            @relation(fields: [userId], references: [id])
+  status          String          @default("Pendiente") // Pendiente, Procesando, En Ruta, Entregado, Cancelado
+  total           Float
+  paymentMethod   String
+  deliveryAddress String?
+  trackingCode    String?         // Código de seguimiento
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  items           OrderItem[]
+  invoiceId       String?
+  invoice         Invoice?        @relation(fields: [invoiceId], references: [id])
+  deliveryRouteId String?
+  deliveryRoute   DeliveryRoute?  @relation(fields: [deliveryRouteId], references: [id])
+}
+
+// Modelo de Item de Orden
+model OrderItem {
+  id          String    @id @default(cuid())
+  orderId     String
+  order       Order     @relation(fields: [orderId], references: [id])
+  productId   String
+  product     Product   @relation(fields: [productId], references: [id])
+  quantity    Int
+  price       Float
+  total       Float
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+// Modelo de Suscripción
+model Subscription {
+  id                String    @id @default(cuid())
+  customerId        String
+  customer          Customer  @relation(fields: [customerId], references: [id])
+  plan              String    // Plan Básico, Plan Estándar, Plan Premium
+  frequency         String    // Semanal, Quincenal, Mensual
+  price             Float
+  startDate         DateTime
+  nextDelivery      DateTime
+  deliveryInstructions String? // Instrucciones de entrega
+  paymentDetails    String?   // Detalles de pago (serialized JSON)
+  status            String    @default("Activa") // Activa, Pendiente, Cancelada
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
+
+// Modelo de Consignación
+model Consignment {
+  id          String    @id @default(cuid())
+  store       String
+  date        DateTime
+  status      String    @default("En Proceso") // En Proceso, Completada, Facturada
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  items       ConsignmentItem[]
+}
+
+// Modelo de Item de Consignación
+model ConsignmentItem {
+  id            String    @id @default(cuid())
+  consignmentId String
+  consignment   Consignment @relation(fields: [consignmentId], references: [id])
+  productId     String
+  product       Product   @relation(fields: [productId], references: [id])
+  delivered     Int
+  sold          Int       @default(0)
+  returned      Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// Modelo de Factura
+model Invoice {
+  id            String    @id @default(cuid())
+  invoiceNumber String    @unique
+  customerId    String
+  customer      Customer  @relation(fields: [customerId], references: [id])
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+  type          String    // Venta Directa, Suscripción, Consignación
+  total         Float
+  status        String    @default("Pendiente") // Pagada, Pendiente, Cancelada
+  paymentMethod String?
+  paymentDetails String?   // Detalles de pago (serialized JSON)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  orders        Order[]
+}
+
+// Modelo de Configuración
+model Config {
+  id            String    @id @default(cuid())
+  key           String    @unique
+  value         String
+  description   String?   // Descripción de la configuración
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// Modelo de Ruta de Entrega
+model DeliveryRoute {
+  id          String    @id @default(cuid())
+  driverName  String
+  orders      Order[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+// Modelo de Conductor
+model Driver {
+  id          String    @id @default(cuid())
+  name        String
+  phone       String
+  status      String    @default("Disponible") // Disponible, Ocupado, Inactivo
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+// Warehouse Order Model
+model WarehouseOrder {
+  id               String                @id @default(cuid())
+  orderNumber      String                @unique
+  sourceOrderId    String?               // Original order ID from e-commerce platform
+  source           String                // "website", "shopify", "amazon", etc.
+  customerId       String
+  customer         Customer              @relation(fields: [customerId], references: [id])
+  status           String                @default("new") // "new", "processing", "ready"
+  items            WarehouseOrderItem[]
+  qrCode           String?               // Generated QR code for tracking
+  gs1Code          String?               // GS1 code for inventory
+  notes            String?               
+  priority         Int                   @default(1) // 1-low, 2-medium, 3-high
+  assignedTo       String?               // User ID of warehouse staff assigned
+  processingStartedAt DateTime?          // When order processing started
+  processingCompletedAt DateTime?        // When order was marked ready
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  deliveryMethod   String?               // "doorDash", "uber", "custom"
+  deliveryDetails  String?               // Delivery-specific information (serialized JSON)
+  deliveryStatus   String?               // "pending", "assigned", "in_transit", "delivered"
+  warehouseTicket  WarehouseTicket?
+}
+
+// Warehouse Order Item Model
+model WarehouseOrderItem {
+  id              String         @id @default(cuid())
+  warehouseOrderId String
+  warehouseOrder  WarehouseOrder @relation(fields: [warehouseOrderId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product        @relation(fields: [productId], references: [id])
+  quantity        Int
+  notes           String?        
+  fulfilled       Int            @default(0) // Number of items fulfilled
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+}
+
+// Warehouse Ticket Model
+model WarehouseTicket {
+  id              String         @id @default(cuid())
+  warehouseOrderId String         @unique
+  warehouseOrder  WarehouseOrder @relation(fields: [warehouseOrderId], references: [id], onDelete: Cascade)
+  ticketNumber    String         @unique
+  printedAt       DateTime?
+  printedBy       String?
+  qrCodeImage     String?        // URL or path to QR code image
+  gs1CodeImage    String?        // URL or path to GS1 code image
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+}
